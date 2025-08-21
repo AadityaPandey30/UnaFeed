@@ -44,113 +44,120 @@ export default function PostFeedPage() {
   const [editingId, setEditingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // API call to detect post type based on user input
-  const detectPostType = async (prompt, files) => {
+  // API call to classify post type
+  const classifyPostType = async (prompt) => {
     try {
-      const formData = new FormData();
-      formData.append("prompt", prompt);
-
-      // Add files to FormData if they exist
-      if (files && files.length > 0) {
-        files.forEach((file, index) => {
-          formData.append(`file_${index}`, file);
-        });
-      }
-
-      const response = await fetch("/api/detect-post-type", {
+      const response = await fetch("/api/ai/classify", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to detect post type");
+        throw new Error("Failed to classify post type");
       }
 
       const result = await response.json();
-      return result; // Expected format: { type, data, confidence }
+      return result.type;
     } catch (error) {
-      console.error("Error detecting post type:", error);
-      // Fallback to local detection if API fails
-      return detectPostTypeLocally(prompt, files);
+      console.error("Error classifying post type:", error);
+      throw error;
     }
   };
 
-  // Fallback local detection logic
-  const detectPostTypeLocally = (prompt, files) => {
+  // API call to generate event data
+  const generateEventData = async (prompt) => {
+    try {
+      const response = await fetch("/api/ai/generate/event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate event data");
+      }
+
+      const result = await response.json();
+      return result.event;
+    } catch (error) {
+      console.error("Error generating event data:", error);
+      throw error;
+    }
+  };
+
+  // API call to generate announcement data
+  const generateAnnouncementData = async (prompt) => {
+    try {
+      const response = await fetch("/api/ai/generate/announcement", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate announcement data");
+      }
+
+      const result = await response.json();
+      return result.announcement;
+    } catch (error) {
+      console.error("Error generating announcement data:", error);
+      throw error;
+    }
+  };
+
+  // Generate lost/found data locally (since no API endpoint provided)
+  const generateLostFoundData = (prompt, files) => {
     const lowerPrompt = prompt.toLowerCase();
+    const hasImages = files && files.some((file) => file.type.startsWith("image/"));
 
-    // Check for image files that might indicate lost/found items
-    const hasImages =
-      files && files.some((file) => file.type.startsWith("image/"));
-
-    if (
-      lowerPrompt.includes("event") ||
-      lowerPrompt.includes("conference") ||
-      lowerPrompt.includes("meeting") ||
-      lowerPrompt.includes("workshop") ||
-      lowerPrompt.includes("seminar") ||
-      lowerPrompt.includes("training")
-    ) {
-      return {
-        type: "event",
-        data: {
-          title: extractTitle(prompt) || "New Event",
-          description: prompt,
-          location: extractLocation(prompt) || "TBD",
-          date: extractDate(prompt) || new Date().toISOString().split("T")[0],
-        },
-        confidence: 0.8,
-      };
-    } else if (
-      lowerPrompt.includes("lost") ||
-      lowerPrompt.includes("found") ||
-      lowerPrompt.includes("missing") ||
-      hasImages
-    ) {
-      return {
-        type: lowerPrompt.includes("found") ? "found" : "lost",
-        data: {
-          item: extractItem(prompt) || "Item from prompt",
-          location: extractLocation(prompt) || "Location TBD",
-          image: hasImages
-            ? URL.createObjectURL(
-                files.find((f) => f.type.startsWith("image/"))
-              )
-            : null,
-        },
-        confidence: hasImages ? 0.9 : 0.7,
-      };
-    } else {
-      return {
-        type: "announcement",
-        data: {
-          title: extractTitle(prompt) || "New Announcement",
-          dept: extractDepartment(prompt) || "General",
-          content: prompt,
-          attachment: files && files.length > 0 ? files[0].name : null,
-        },
-        confidence: 0.6,
-      };
-    }
+    const type = lowerPrompt.includes("found") ? "found" : "lost";
+    
+    return {
+      item: extractItem(prompt) || "Item from description",
+      location: extractLocation(prompt) || "Location not specified",
+      image: hasImages
+        ? URL.createObjectURL(files.find((f) => f.type.startsWith("image/")))
+        : null,
+      type: type,
+    };
   };
 
-  // Helper functions to extract information from prompt
-  const extractTitle = (prompt) => {
-    const sentences = prompt.split(".")[0];
-    return sentences.length > 50
-      ? sentences.substring(0, 47) + "..."
-      : sentences;
+  // Helper functions for extracting information from prompt (for lost/found)
+  const extractItem = (prompt) => {
+    const itemKeywords = [
+      "phone", "wallet", "keys", "bag", "laptop", "watch", "glasses", "book",
+      "notebook", "charger", "headphones", "earphones", "umbrella", "jacket"
+    ];
+    const words = prompt.toLowerCase().split(" ");
+
+    for (const word of words) {
+      if (itemKeywords.some((keyword) => word.includes(keyword))) {
+        return word;
+      }
+    }
+
+    // Try to extract from context
+    const lostFoundIndex = words.findIndex(
+      (word) => word.includes("lost") || word.includes("found") || word.includes("missing")
+    );
+
+    if (lostFoundIndex !== -1 && words[lostFoundIndex + 1]) {
+      return words.slice(lostFoundIndex + 1, lostFoundIndex + 3).join(" ");
+    }
+
+    return null;
   };
 
   const extractLocation = (prompt) => {
-    const locationKeywords = [
-      "at",
-      "in",
-      "room",
-      "building",
-      "hall",
-      "auditorium",
-    ];
+    const locationKeywords = ["at", "in", "room", "building", "hall", "auditorium", "library", "cafeteria"];
     const words = prompt.toLowerCase().split(" ");
 
     for (let i = 0; i < words.length; i++) {
@@ -161,113 +168,7 @@ export default function PostFeedPage() {
     return null;
   };
 
-  const extractDate = (prompt) => {
-    const dateRegex =
-      /\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}-\d{1,2}-\d{4}/;
-    const match = prompt.match(dateRegex);
-    return match ? match[0] : null;
-  };
-
-  const extractItem = (prompt) => {
-    const itemKeywords = [
-      "phone",
-      "wallet",
-      "keys",
-      "bag",
-      "laptop",
-      "watch",
-      "glasses",
-    ];
-    const words = prompt.toLowerCase().split(" ");
-
-    for (const word of words) {
-      if (itemKeywords.some((keyword) => word.includes(keyword))) {
-        return word;
-      }
-    }
-
-    // If no specific item found, try to extract from context
-    const lostFoundIndex = words.findIndex(
-      (word) =>
-        word.includes("lost") ||
-        word.includes("found") ||
-        word.includes("missing")
-    );
-
-    if (lostFoundIndex !== -1 && words[lostFoundIndex + 1]) {
-      return words.slice(lostFoundIndex + 1, lostFoundIndex + 3).join(" ");
-    }
-
-    return null;
-  };
-
-  const extractDepartment = (prompt) => {
-    const deptKeywords = {
-      admin: "Administration",
-      hr: "Human Resources",
-      it: "IT Department",
-      finance: "Finance",
-      marketing: "Marketing",
-      operations: "Operations",
-    };
-
-    const lowerPrompt = prompt.toLowerCase();
-    for (const [keyword, dept] of Object.entries(deptKeywords)) {
-      if (lowerPrompt.includes(keyword)) {
-        return dept;
-      }
-    }
-    return null;
-  };
-
-  // Create post based on detected type and data
-  const createPostFromDetection = (detection) => {
-    const basePost = {
-      id: Date.now(),
-      type: detection.type,
-      createdAt: new Date(),
-    };
-
-    switch (detection.type) {
-      case "event":
-        return {
-          ...basePost,
-          title: detection.data.title,
-          description: detection.data.description,
-          location: detection.data.location,
-          date: detection.data.date,
-        };
-
-      case "lost":
-      case "found":
-        return {
-          ...basePost,
-          item: detection.data.item,
-          location: detection.data.location,
-          image: detection.data.image,
-        };
-
-      case "announcement":
-        return {
-          ...basePost,
-          title: detection.data.title,
-          dept: detection.data.dept,
-          content: detection.data.content,
-          attachment: detection.data.attachment,
-        };
-
-      default:
-        return {
-          ...basePost,
-          type: "announcement",
-          title: "New Post",
-          dept: "General",
-          content: detection.data.content || "New post content",
-          attachment: null,
-        };
-    }
-  };
-
+  // Main function to create post based on AI classification and generation
   const handleSubmit = async (prompt, files) => {
     if (!prompt.trim() && (!files || files.length === 0)) {
       return; // Don't submit empty posts
@@ -276,21 +177,109 @@ export default function PostFeedPage() {
     setIsLoading(true);
 
     try {
-      // Call API to detect post type
-      const detection = await detectPostType(prompt, files);
+      // Step 1: Classify the post type
+      const typeNumber = await classifyPostType(prompt);
+      console.log(`Post classified as type: ${typeNumber}`);
 
-      // Create post based on detection results
-      const newPost = createPostFromDetection(detection);
+      let postData;
+      let postType;
 
-      // Add confidence score for debugging (remove in production)
-      console.log(
-        `Post type detected: ${detection.type} (confidence: ${detection.confidence})`
-      );
+      // Step 2: Generate data based on classification
+      switch (typeNumber) {
+        case "1": // Event
+          postType = "event";
+          const eventData = await generateEventData(prompt);
+          postData = {
+            id: Date.now(),
+            type: "event",
+            title: eventData.title,
+            description: eventData.description,
+            location: eventData.location,
+            date: eventData.date ? new Date(eventData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            startAt: eventData.startAt ? new Date(eventData.startAt) : null,
+            endAt: eventData.endAt ? new Date(eventData.endAt) : null,
+            createdAt: new Date(),
+            images: files && files.length > 0 ? files.filter(f => f.type.startsWith('image/')).map((file, index) => ({
+              id: Date.now() + index,
+              url: URL.createObjectURL(file),
+              name: file.name,
+              file: file,
+            })) : [],
+            attachments: files && files.length > 0 ? files.filter(f => !f.type.startsWith('image/')).map((file, index) => ({
+              id: Date.now() + index,
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              file: file,
+            })) : [],
+          };
+          break;
 
-      setPosts((prev) => [newPost, ...prev]);
+        case "2": // Lost & Found
+          postType = "lost";
+          const lostFoundData = generateLostFoundData(prompt, files);
+          postData = {
+            id: Date.now(),
+            type: lostFoundData.type,
+            item: lostFoundData.item,
+            location: lostFoundData.location,
+            image: lostFoundData.image,
+            createdAt: new Date(),
+          };
+          break;
+
+        case "3": // Announcement
+          postType = "announcement";
+          const announcementData = await generateAnnouncementData(prompt);
+          postData = {
+            id: Date.now(),
+            type: "announcement",
+            title: announcementData.title,
+            dept: announcementData.department || "General",
+            content: announcementData.description,
+            attachment: files && files.length > 0 ? files[0].name : null,
+            date: announcementData.date ? new Date(announcementData.date) : new Date(),
+            createdAt: new Date(),
+          };
+          break;
+
+        default:
+          // Fallback to announcement
+          postType = "announcement";
+          postData = {
+            id: Date.now(),
+            type: "announcement",
+            title: prompt.split(".")[0] || "New Announcement",
+            dept: "General",
+            content: prompt,
+            attachment: files && files.length > 0 ? files[0].name : null,
+            createdAt: new Date(),
+          };
+      }
+
+      console.log(`Post created:`, postData);
+      setPosts((prev) => [postData, ...prev]);
+
     } catch (error) {
       console.error("Error creating post:", error);
+      
+      // Fallback to local creation if API fails
+      console.log("Falling back to local post creation...");
+      const fallbackPost = {
+        id: Date.now(),
+        type: "announcement",
+        title: prompt.split(".")[0] || "New Post",
+        dept: "General",
+        content: prompt,
+        attachment: files && files.length > 0 ? files[0].name : null,
+        createdAt: new Date(),
+      };
+      
+      setPosts((prev) => [fallbackPost, ...prev]);
+      
       // You might want to show an error message to the user here
+      alert("There was an issue processing your post, but it has been created as an announcement.");
+      
     } finally {
       setIsLoading(false);
     }
@@ -351,7 +340,7 @@ export default function PostFeedPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Community Feed
+            Campus Feed
           </h1>
           <p className="text-gray-600">
             Share events, lost & found items, and announcements
@@ -365,7 +354,9 @@ export default function PostFeedPage() {
         {isLoading && (
           <div className="text-center py-4">
             <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-            <p className="text-gray-600 mt-2">Processing your post...</p>
+            <p className="text-gray-600 mt-2">
+              AI is processing your post...
+            </p>
           </div>
         )}
 

@@ -7,6 +7,7 @@ import InputForm from "./_components/InputForm";
 import EventCard from "./_components/EventCard";
 import LostFoundCard from "./_components/LostFoundCard";
 import AnnouncementCard from "./_components/AnnouncementCard";
+import CommentsSection from "./_components/CommentsSection";
 
 export default function PostFeedPage() {
   const [posts, setPosts] = useState([
@@ -43,6 +44,29 @@ export default function PostFeedPage() {
 
   const [editingId, setEditingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // API call to generate meme
+  const generateMeme = async (prompt) => {
+    try {
+      const response = await fetch("/api/ai/meme", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate meme");
+      }
+
+      const result = await response.json();
+      return result.imageUrl;
+    } catch (error) {
+      console.error("Error generating meme:", error);
+      throw error;
+    }
+  };
 
   // API call to classify post type
   const classifyPostType = async (prompt) => {
@@ -113,21 +137,27 @@ export default function PostFeedPage() {
     }
   };
 
-  // Generate lost/found data locally (since no API endpoint provided)
-  const generateLostFoundData = (prompt, files) => {
-    const lowerPrompt = prompt.toLowerCase();
-    const hasImages = files && files.some((file) => file.type.startsWith("image/"));
+  // API call to generate lost/found data
+  const generateLostFoundData = async (prompt) => {
+    try {
+      const response = await fetch("/api/ai/generate/lostfound", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
 
-    const type = lowerPrompt.includes("found") ? "found" : "lost";
-    
-    return {
-      item: extractItem(prompt) || "Item from description",
-      location: extractLocation(prompt) || "Location not specified",
-      image: hasImages
-        ? URL.createObjectURL(files.find((f) => f.type.startsWith("image/")))
-        : null,
-      type: type,
-    };
+      if (!response.ok) {
+        throw new Error("Failed to generate lost/found data");
+      }
+
+      const result = await response.json();
+      return result.lostfound;
+    } catch (error) {
+      console.error("Error generating lost/found data:", error);
+      throw error;
+    }
   };
 
   // Helper functions for extracting information from prompt (for lost/found)
@@ -212,19 +242,27 @@ export default function PostFeedPage() {
               type: file.type,
               file: file,
             })) : [],
+            comments: [], // Initialize empty comments array
           };
           break;
 
         case "2": // Lost & Found
-          postType = "lost";
-          const lostFoundData = generateLostFoundData(prompt, files);
+          postType = "lostfound";
+          const lostFoundData = await generateLostFoundData(prompt);
+          const hasImages = files && files.some((file) => file.type.startsWith("image/"));
+          
           postData = {
             id: Date.now(),
-            type: lostFoundData.type,
-            item: lostFoundData.item,
-            location: lostFoundData.location,
-            image: lostFoundData.image,
+            type: lostFoundData.mode || "lost", // 'lost' or 'found'
+            item: lostFoundData.itemName,
+            location: lostFoundData.lastSeenLocation,
+            description: lostFoundData.description,
+            lastSeenAt: lostFoundData.lastSeenAt ? new Date(lostFoundData.lastSeenAt) : new Date(),
+            image: hasImages
+              ? URL.createObjectURL(files.find((f) => f.type.startsWith("image/")))
+              : null,
             createdAt: new Date(),
+            comments: [], // Initialize empty comments array
           };
           break;
 
@@ -240,6 +278,7 @@ export default function PostFeedPage() {
             attachment: files && files.length > 0 ? files[0].name : null,
             date: announcementData.date ? new Date(announcementData.date) : new Date(),
             createdAt: new Date(),
+            comments: [], // Initialize empty comments array
           };
           break;
 
@@ -273,6 +312,7 @@ export default function PostFeedPage() {
         content: prompt,
         attachment: files && files.length > 0 ? files[0].name : null,
         createdAt: new Date(),
+        comments: [], // Initialize empty comments array
       };
       
       setPosts((prev) => [fallbackPost, ...prev]);
@@ -296,6 +336,88 @@ export default function PostFeedPage() {
     setEditingId(null);
   };
 
+  // Handle adding comments (with meme generation support)
+  const handleAddComment = async (postId, commentText) => {
+    if (!commentText.trim()) return;
+
+    let finalComment = commentText;
+    let memeUrl = null;
+
+    // Check if comment starts with /meme
+    if (commentText.toLowerCase().startsWith('/meme ')) {
+      const memePrompt = commentText.substring(6).trim(); // Remove '/meme ' prefix
+      
+      try {
+        memeUrl = await generateMeme(memePrompt);
+        finalComment = `Generated meme: ${memePrompt}`;
+      } catch (error) {
+        console.error("Failed to generate meme:", error);
+        finalComment = `Failed to generate meme: ${memePrompt}`;
+      }
+    }
+
+    const newComment = {
+      id: Date.now(),
+      text: finalComment,
+      memeUrl: memeUrl,
+      author: `User${Math.floor(Math.random() * 1000)}`, // Simulated user
+      createdAt: new Date(),
+      replies: [],
+    };
+
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? { ...post, comments: [...(post.comments || []), newComment] }
+          : post
+      )
+    );
+  };
+
+  // Handle adding replies to comments
+  const handleAddReply = async (postId, commentId, replyText) => {
+    if (!replyText.trim()) return;
+
+    let finalReply = replyText;
+    let memeUrl = null;
+
+    // Check if reply starts with /meme
+    if (replyText.toLowerCase().startsWith('/meme ')) {
+      const memePrompt = replyText.substring(6).trim();
+      
+      try {
+        memeUrl = await generateMeme(memePrompt);
+        finalReply = `Generated meme: ${memePrompt}`;
+      } catch (error) {
+        console.error("Failed to generate meme:", error);
+        finalReply = `Failed to generate meme: ${memePrompt}`;
+      }
+    }
+
+    const newReply = {
+      id: Date.now(),
+      text: finalReply,
+      memeUrl: memeUrl,
+      author: `User${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date(),
+    };
+
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              comments: post.comments.map((comment) =>
+                comment.id === commentId
+                  ? { ...comment, replies: [...comment.replies, newReply] }
+                  : comment
+              ),
+            }
+          : post
+      )
+    );
+  };
+
   const renderCard = (post) => {
     switch (post.type) {
       case "event":
@@ -306,6 +428,12 @@ export default function PostFeedPage() {
             onEdit={handleEdit}
             onSave={handleSave}
             editingId={editingId}
+            onAddComment={handleAddComment}
+            onAddReply={handleAddReply}
+            onAddComment={handleAddComment}
+            onAddReply={handleAddReply}
+            onAddComment={handleAddComment}
+            onAddReply={handleAddReply}
           />
         );
       case "lost":

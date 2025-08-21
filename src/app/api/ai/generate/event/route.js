@@ -14,7 +14,9 @@ export async function POST(req) {
           role: "system",
           content:
             "You are a strict JSON generator. Extract event details from user input. " +
-            "Return ONLY valid JSON with fields: { title, description, location, date, startAt, endAt }.",
+            "Return ONLY valid JSON with fields: { title, description, location, date, startAt, endAt }. " +
+            "All date fields MUST be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). " +
+            "Do NOT return fuzzy text like 'tomorrow evening' or 'next Friday'.",
         },
         { role: "user", content: prompt },
       ],
@@ -23,7 +25,21 @@ export async function POST(req) {
 
     const result = completion.choices[0].message.content.trim();
 
-    return NextResponse.json({ event: JSON.parse(result) });
+    let event;
+    try {
+      event = JSON.parse(result);
+
+      // Convert to Date objects
+      ['date', 'startAt', 'endAt'].forEach((field) => {
+        if (event[field]) event[field] = new Date(event[field]);
+      });
+
+    } catch (parseErr) {
+      console.error("Failed to parse AI JSON:", result);
+      return NextResponse.json({ error: "AI returned invalid JSON" }, { status: 500 });
+    }
+
+    return NextResponse.json({ event });
   } catch (err) {
     console.error("Event generation error:", err);
     return NextResponse.json({ error: "Failed to generate event post" }, { status: 500 });

@@ -14,7 +14,10 @@ export async function POST(req) {
           role: "system",
           content:
             "You are a strict JSON generator. Extract announcement details. " +
-            "Return ONLY JSON: { department, title, description, date }.",
+            "Return ONLY JSON with the following fields: " +
+            "{ department, title, description, date }. " +
+            "The date MUST be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). " +
+            "Do NOT return any fuzzy text like 'yesterday' or 'tomorrow'.",
         },
         { role: "user", content: prompt },
       ],
@@ -23,9 +26,24 @@ export async function POST(req) {
 
     const result = completion.choices[0].message.content.trim();
 
-    return NextResponse.json({ announcement: JSON.parse(result) });
+    // Parse JSON safely
+    let announcement;
+    try {
+      announcement = JSON.parse(result);
+    } catch (parseErr) {
+      console.error("Failed to parse AI JSON:", result);
+      return NextResponse.json(
+        { error: "AI returned invalid JSON" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ announcement });
   } catch (err) {
     console.error("Announcement generation error:", err);
-    return NextResponse.json({ error: "Failed to generate announcement post" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to generate announcement post" },
+      { status: 500 }
+    );
   }
 }

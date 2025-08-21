@@ -11,6 +11,10 @@
   "dependencies": {
     "mongoose": "^8.17.2",
     "next": "15.5.0",
+<<<<<<< HEAD
+=======
+    "openai": "^5.13.1",
+>>>>>>> 9f492e9cfcafb69b16aacce6622fd9cd32c558ce
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

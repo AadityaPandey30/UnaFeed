@@ -37,7 +37,7 @@ const InputForm = ({ onSubmit }) => {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="What would you like to post? Describe an event, report lost/found items, or make an announcement..."
-            className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none transition-colors"
+            className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none transition-colors text-black"
             rows="4"
           />
         </div>

@@ -307,7 +307,7 @@ const EventCard = ({ post, onEdit, onSave, editingId }) => {
           </>
         )}
 
-        {/* RSVP Buttons */}
+        {/* RSVP Buttons
         {!isEditing && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -379,7 +379,7 @@ const EventCard = ({ post, onEdit, onSave, editingId }) => {
               </button>
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );

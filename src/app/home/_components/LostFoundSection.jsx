@@ -187,7 +187,7 @@ const LostFoundSection = () => {
                   <input
                     type="text"
                     placeholder="Write a comment..."
-                    className="w-full border rounded p-1 text-sm"
+                    className="w-full border rounded p-1 text-sm text-black"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleComment(item.id, e.target.value);

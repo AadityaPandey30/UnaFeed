@@ -207,7 +207,7 @@ const AnnouncementSection = () => {
                   <input
                     type="text"
                     placeholder="Write a comment..."
-                    className="w-full border rounded p-1 text-sm"
+                    className="w-full border rounded p-1 text-sm text-black"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleComment(a.id, e.target.value);
